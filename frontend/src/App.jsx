@@ -22,7 +22,7 @@ import {
 
 import "./App.css";
 
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = "https://ai-tutor-backend-qzbq.onrender.com";
 
 const suggestions = [
   "What is Artificial Intelligence?",
