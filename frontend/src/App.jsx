@@ -1,350 +1,277 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
+
 import {
-  Plus,
-  Send,
-  Moon,
-  Sun,
-  Menu,
-  Trash2,
+  Bot,
+  ChevronDown,
   Copy,
-  RefreshCw,
-  ThumbsUp,
-  ThumbsDown,
-  Sparkles,
+  Menu,
   MessageSquare,
-  X
+  Moon,
+  Plus,
+  RotateCcw,
+  Send,
+  Settings,
+  Sparkles,
+  Sun,
+  ThumbsDown,
+  ThumbsUp,
+  Trash2,
+  User,
+  X,
 } from "lucide-react";
 
 import "./App.css";
 
 const API_URL = "https://ai-tutor-backend-qzbq.onrender.com";
 
+const STORAGE_KEY = "ai_tutor_chats";
+
 const suggestions = [
-  "What is Artificial Intelligence?",
-  "Explain binary search with an example",
+  "Explain artificial intelligence in simple words",
   "What is machine learning?",
-  "Explain OOP concepts in Java"
+  "Explain binary search with an example",
+  "What is a neural network?",
+];
+
+const languages = [
+  { value: "english", label: "English" },
+  { value: "telugu", label: "తెలుగు" },
+  { value: "hindi", label: "हिन्दी" },
+];
+
+const levels = [
+  { value: "beginner", label: "Beginner" },
+  { value: "intermediate", label: "Intermediate" },
+  { value: "advanced", label: "Advanced" },
+];
+
+const modes = [
+  { value: "tutor", label: "Tutor" },
+  { value: "code tutor", label: "Code Tutor" },
 ];
 
 function App() {
   const [chats, setChats] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem("ai_tutor_chats")) || [];
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
     }
   });
 
   const [activeChatId, setActiveChatId] = useState(null);
-  const [message, setMessage] = useState("");
+  const [input, setInput] = useState("");
+
   const [language, setLanguage] = useState("english");
   const [level, setLevel] = useState("beginner");
   const [mode, setMode] = useState("tutor");
-  const [darkMode, setDarkMode] = useState(false);
+
+  const [darkMode, setDarkMode] = useState(true);
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const textareaRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  useEffect(() => {
-    localStorage.setItem("ai_tutor_chats", JSON.stringify(chats));
-  }, [chats]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior: "smooth"
-    });
-  }, [chats, activeChatId, loading]);
-
-  const activeChat = chats.find(
-    (chat) => chat.id === activeChatId
+  const activeChat = useMemo(
+    () => chats.find((chat) => chat.id === activeChatId),
+    [chats, activeChatId]
   );
 
   const messages = activeChat?.messages || [];
 
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(chats));
+  }, [chats]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
+  }, [messages, loading]);
+
   const createNewChat = () => {
-    setActiveChatId(null);
-    setMessage("");
+    const newChat = {
+      id: Date.now().toString(),
+      title: "New Chat",
+      messages: [],
+      createdAt: new Date().toISOString(),
+    };
+
+    setChats((prev) => [newChat, ...prev]);
+    setActiveChatId(newChat.id);
+    setInput("");
     setSidebarOpen(false);
   };
 
-  const deleteChat = (id, event) => {
-    event?.stopPropagation();
-
-    setChats((prev) =>
-      prev.filter((chat) => chat.id !== id)
-    );
+  const deleteChat = (id) => {
+    setChats((prev) => prev.filter((chat) => chat.id !== id));
 
     if (activeChatId === id) {
       setActiveChatId(null);
     }
   };
 
-  const updateChat = (chatId, newMessages) => {
+  const updateChat = (chatId, updater) => {
     setChats((prev) =>
       prev.map((chat) =>
-        chat.id === chatId
-          ? {
-              ...chat,
-              messages: newMessages
-            }
-          : chat
+        chat.id === chatId ? updater(chat) : chat
       )
     );
   };
 
-  const createChatIfNeeded = () => {
+  const startChatIfNeeded = () => {
     if (activeChatId) {
       return activeChatId;
     }
 
-    const id = Date.now().toString();
-
     const newChat = {
-      id,
+      id: Date.now().toString(),
       title: "New Chat",
-      messages: []
+      messages: [],
+      createdAt: new Date().toISOString(),
     };
 
     setChats((prev) => [newChat, ...prev]);
-    setActiveChatId(id);
+    setActiveChatId(newChat.id);
 
-    return id;
+    return newChat.id;
   };
 
-  const sendMessage = async (customMessage = null) => {
-    const text = (customMessage ?? message).trim();
+  const sendMessage = async (messageText = input) => {
+    const text = messageText.trim();
 
     if (!text || loading) {
       return;
     }
 
-    setMessage("");
-    setLoading(true);
-
-    const chatId = createChatIfNeeded();
+    const chatId = startChatIfNeeded();
 
     const currentChat =
-      chats.find((chat) => chat.id === chatId);
+      chats.find((chat) => chat.id === chatId) || {
+        id: chatId,
+        title: "New Chat",
+        messages: [],
+      };
 
-    const oldMessages =
-      currentChat?.messages || [];
+    const oldMessages = currentChat.messages || [];
 
     const userMessage = {
-      id: Date.now(),
+      id: Date.now().toString(),
       role: "user",
-      content: text
+      content: text,
+    };
+
+    const assistantPlaceholder = {
+      id: `${Date.now()}-assistant`,
+      role: "assistant",
+      content: "",
     };
 
     const updatedMessages = [
       ...oldMessages,
-      userMessage
+      userMessage,
+      assistantPlaceholder,
     ];
 
-    setChats((prev) => {
-      const exists = prev.some(
-        (chat) => chat.id === chatId
-      );
+    updateChat(chatId, (chat) => ({
+      ...chat,
+      title:
+        chat.messages.length === 0
+          ? text.length > 35
+            ? `${text.slice(0, 35)}...`
+            : text
+          : chat.title,
+      messages: updatedMessages,
+    }));
 
-      if (!exists) {
-        return [
-          {
-            id: chatId,
-            title:
-              text.length > 35
-                ? text.substring(0, 35) + "..."
-                : text,
-            messages: updatedMessages
-          },
-          ...prev
-        ];
-      }
-
-      return prev.map((chat) =>
-        chat.id === chatId
-          ? {
-              ...chat,
-              title:
-                chat.title === "New Chat"
-                  ? text.length > 35
-                    ? text.substring(0, 35) + "..."
-                    : text
-                  : chat.title,
-              messages: updatedMessages
-            }
-          : chat
-      );
-    });
+    setInput("");
+    setLoading(true);
 
     try {
-      const response = await fetch(
-        `${API_URL}/chat`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            message: text,
-            language,
-            level,
-            mode,
-            history: oldMessages.map(
-              (item) => ({
-                role: item.role,
-                content: item.content
-              })
-            )
-          })
-        }
-      );
+      const response = await fetch(`${API_URL}/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: text,
+          language,
+          level,
+          mode,
+          history: oldMessages.map((item) => ({
+            role: item.role,
+            content: item.content,
+          })),
+        }),
+      });
 
+      /*
+       * IMPORTANT:
+       * If the backend returns 400, 404, 500, 502, etc.,
+       * this will show the actual server error.
+       */
       if (!response.ok) {
+        const errorText = await response.text();
+
         throw new Error(
-          `Server error: ${response.status}`
+          `Server error ${response.status}: ${errorText}`
         );
       }
 
       const data = await response.json();
 
-      const assistantMessage = {
-        id: Date.now() + 1,
-        role: "assistant",
-        content:
-          data.answer ||
-          data.response ||
-          "Sorry, I could not generate a response."
-      };
+      const answer =
+        data.answer ||
+        data.response ||
+        data.message ||
+        "I couldn't generate a response.";
 
-      setChats((prev) =>
-        prev.map((chat) =>
-          chat.id === chatId
+      updateChat(chatId, (chat) => ({
+        ...chat,
+        messages: chat.messages.map((message) =>
+          message.id === assistantPlaceholder.id
             ? {
-                ...chat,
-                messages: [
-                  ...updatedMessages,
-                  assistantMessage
-                ]
+                ...message,
+                content: answer,
               }
-            : chat
-        )
-      );
+            : message
+        ),
+      }));
     } catch (error) {
-      console.error(error);
+      console.error("Chat error:", error);
 
-      const errorMessage = {
-        id: Date.now() + 1,
-        role: "assistant",
-        content:
-          "Sorry, I couldn't connect to the AI Tutor backend. Please make sure FastAPI is running on port 8000."
-      };
-
-      setChats((prev) =>
-        prev.map((chat) =>
-          chat.id === chatId
+      updateChat(chatId, (chat) => ({
+        ...chat,
+        messages: chat.messages.map((message) =>
+          message.id === assistantPlaceholder.id
             ? {
-                ...chat,
-                messages: [
-                  ...updatedMessages,
-                  errorMessage
-                ]
+                ...message,
+                content: `Sorry, something went wrong.\n\n**Error:** ${error.message}`,
               }
-            : chat
-        )
-      );
+            : message
+        ),
+      }));
     } finally {
       setLoading(false);
     }
   };
 
-  const regenerate = async (index) => {
-    if (!activeChat || loading) {
-      return;
-    }
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    sendMessage();
+  };
 
-    const assistantMessage =
-      activeChat.messages[index];
-
-    if (
-      !assistantMessage ||
-      assistantMessage.role !== "assistant"
-    ) {
-      return;
-    }
-
-    const previousUserMessage =
-      activeChat.messages[index - 1];
-
-    if (
-      !previousUserMessage ||
-      previousUserMessage.role !== "user"
-    ) {
-      return;
-    }
-
-    const messagesBeforeAssistant =
-      activeChat.messages.slice(0, index);
-
-    updateChat(
-      activeChat.id,
-      messagesBeforeAssistant
-    );
-
-    setLoading(true);
-
-    try {
-      const history =
-        messagesBeforeAssistant
-          .slice(0, -1)
-          .map((item) => ({
-            role: item.role,
-            content: item.content
-          }));
-
-      const response = await fetch(
-        `${API_URL}/chat`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            message: previousUserMessage.content,
-            language,
-            level,
-            mode,
-            history
-          })
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to regenerate");
-      }
-
-      const data = await response.json();
-
-      updateChat(activeChat.id, [
-        ...messagesBeforeAssistant,
-        {
-          id: Date.now(),
-          role: "assistant",
-          content:
-            data.answer ||
-            data.response ||
-            "Unable to regenerate response."
-        }
-      ]);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
     }
   };
 
@@ -352,42 +279,223 @@ function App() {
     try {
       await navigator.clipboard.writeText(content);
     } catch (error) {
-      console.error(error);
+      console.error("Copy failed:", error);
     }
   };
 
-  const handleKeyDown = (event) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      sendMessage();
+  const regenerateMessage = async (messageIndex) => {
+    if (loading) {
+      return;
     }
-  };
 
-  const selectSuggestion = (text) => {
-    setMessage(text);
+    const chat = chats.find((item) => item.id === activeChatId);
+
+    if (!chat) {
+      return;
+    }
+
+    const userMessage = [...chat.messages]
+      .slice(0, messageIndex)
+      .reverse()
+      .find((message) => message.role === "user");
+
+    if (!userMessage) {
+      return;
+    }
+
+    const messagesWithoutAssistant = chat.messages.slice(
+      0,
+      messageIndex
+    );
+
+    updateChat(activeChatId, (current) => ({
+      ...current,
+      messages: messagesWithoutAssistant,
+    }));
+
+    setInput(userMessage.content);
 
     setTimeout(() => {
-      textareaRef.current?.focus();
-    }, 50);
+      sendMessage(userMessage.content);
+    }, 100);
   };
 
-  const formatTitle = (title) => {
-    if (!title) {
-      return "New Chat";
-    }
+  const rateMessage = (messageId, rating) => {
+    updateChat(activeChatId, (chat) => ({
+      ...chat,
+      messages: chat.messages.map((message) =>
+        message.id === messageId
+          ? {
+              ...message,
+              rating,
+            }
+          : message
+      ),
+    }));
+  };
 
-    return title.length > 32
-      ? title.substring(0, 32) + "..."
-      : title;
+  const handleSuggestion = (suggestion) => {
+    sendMessage(suggestion);
   };
 
   return (
-    <div
-      className={`app ${
-        darkMode ? "dark" : ""
-      }`}
-    >
-      {/* Mobile overlay */}
+    <div className={darkMode ? "app dark" : "app"}>
+      {/* SIDEBAR */}
+
+      <aside className={sidebarOpen ? "sidebar open" : "sidebar"}>
+        <div className="sidebar-header">
+          <div className="brand">
+            <div className="brand-icon">
+              <Sparkles size={20} />
+            </div>
+
+            <div>
+              <h2>AI Tutor</h2>
+              <span>Multilingual Learning</span>
+            </div>
+          </div>
+
+          <button
+            className="icon-button mobile-close"
+            onClick={() => setSidebarOpen(false)}
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <button className="new-chat-button" onClick={createNewChat}>
+          <Plus size={18} />
+          New Chat
+        </button>
+
+        <div className="recent-section">
+          <div className="section-title">
+            <span>Recent Chats</span>
+          </div>
+
+          <div className="chat-list">
+            {chats.length === 0 ? (
+              <div className="empty-chats">
+                <MessageSquare size={18} />
+                <span>No conversations yet</span>
+              </div>
+            ) : (
+              chats.map((chat) => (
+                <div
+                  key={chat.id}
+                  className={
+                    chat.id === activeChatId
+                      ? "chat-item active"
+                      : "chat-item"
+                  }
+                  onClick={() => {
+                    setActiveChatId(chat.id);
+                    setSidebarOpen(false);
+                  }}
+                >
+                  <MessageSquare size={17} />
+
+                  <span className="chat-title">
+                    {chat.title}
+                  </span>
+
+                  <button
+                    className="delete-chat"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteChat(chat.id);
+                    }}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="sidebar-bottom">
+          <div className="sidebar-control">
+            <label>Language</label>
+
+            <div className="select-wrapper">
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+              >
+                {languages.map((item) => (
+                  <option
+                    key={item.value}
+                    value={item.value}
+                  >
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+
+              <ChevronDown size={15} />
+            </div>
+          </div>
+
+          <div className="sidebar-control">
+            <label>Level</label>
+
+            <div className="select-wrapper">
+              <select
+                value={level}
+                onChange={(e) => setLevel(e.target.value)}
+              >
+                {levels.map((item) => (
+                  <option
+                    key={item.value}
+                    value={item.value}
+                  >
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+
+              <ChevronDown size={15} />
+            </div>
+          </div>
+
+          <div className="sidebar-control">
+            <label>Mode</label>
+
+            <div className="select-wrapper">
+              <select
+                value={mode}
+                onChange={(e) => setMode(e.target.value)}
+              >
+                {modes.map((item) => (
+                  <option
+                    key={item.value}
+                    value={item.value}
+                  >
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+
+              <ChevronDown size={15} />
+            </div>
+          </div>
+
+          <button
+            className="theme-button"
+            onClick={() => setDarkMode((prev) => !prev)}
+          >
+            {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+
+            <span>
+              {darkMode ? "Light Mode" : "Dark Mode"}
+            </span>
+          </button>
+        </div>
+      </aside>
+
+      {/* MOBILE OVERLAY */}
+
       {sidebarOpen && (
         <div
           className="sidebar-overlay"
@@ -395,294 +503,132 @@ function App() {
         />
       )}
 
-      {/* Sidebar */}
-      <aside
-        className={`sidebar ${
-          sidebarOpen ? "open" : ""
-        }`}
-      >
-        <div className="sidebar-brand">
-          <div className="brand-icon">
-            <Sparkles size={22} />
-          </div>
+      {/* MAIN */}
 
-          <div>
-            <h2>AI Tutor</h2>
-            <span>Adaptive Learning</span>
-          </div>
-
+      <main className="main-content">
+        <header className="topbar">
           <button
-            className="mobile-close"
-            onClick={() =>
-              setSidebarOpen(false)
-            }
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        <button
-          className="new-chat-button"
-          onClick={createNewChat}
-        >
-          <Plus size={20} />
-          <span>New Chat</span>
-        </button>
-
-        <div className="recent-title">
-          Recent Chats
-        </div>
-
-        <div className="chat-list">
-          {chats.length === 0 ? (
-            <div className="empty-chats">
-              No recent chats
-            </div>
-          ) : (
-            chats.map((chat) => (
-              <div
-                key={chat.id}
-                className={`chat-item ${
-                  activeChatId === chat.id
-                    ? "active"
-                    : ""
-                }`}
-                onClick={() => {
-                  setActiveChatId(chat.id);
-                  setSidebarOpen(false);
-                }}
-              >
-                <MessageSquare size={18} />
-
-                <span>
-                  {formatTitle(chat.title)}
-                </span>
-
-                <button
-                  className="delete-chat"
-                  onClick={(event) =>
-                    deleteChat(
-                      chat.id,
-                      event
-                    )
-                  }
-                >
-                  <Trash2 size={15} />
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-
-        <div className="sidebar-footer">
-          <strong>AI Tutor</strong>
-          <span>
-            English • Telugu • Hindi
-          </span>
-        </div>
-      </aside>
-
-      {/* Main */}
-      <main className="main">
-        {/* Header */}
-        <header className="header">
-          <button
-            className="menu-button"
-            onClick={() =>
-              setSidebarOpen(true)
-            }
+            className="icon-button mobile-menu"
+            onClick={() => setSidebarOpen(true)}
           >
             <Menu size={22} />
           </button>
 
-          <div>
-            <h1>
-              Adaptive Multilingual AI Tutor
-            </h1>
+          <div className="topbar-title">
+            <div className="topbar-icon">
+              <Bot size={20} />
+            </div>
 
-            <p>
-              Learn • Practice • Understand
-            </p>
+            <div>
+              <h1>AI Tutor</h1>
+              <span>
+                {language.charAt(0).toUpperCase() +
+                  language.slice(1)}{" "}
+                •{" "}
+                {level.charAt(0).toUpperCase() +
+                  level.slice(1)}
+              </span>
+            </div>
           </div>
 
           <button
-            className="theme-button"
-            onClick={() =>
-              setDarkMode((prev) => !prev)
-            }
-            title="Toggle theme"
+            className="new-chat-top"
+            onClick={createNewChat}
           >
-            {darkMode ? (
-              <Sun size={21} />
-            ) : (
-              <Moon size={21} />
-            )}
+            <Plus size={17} />
+            <span>New Chat</span>
           </button>
         </header>
 
-        {/* Controls */}
-        <div className="controls">
-          <div className="control-group">
-            <label>Language</label>
-
-            <select
-              value={language}
-              onChange={(event) =>
-                setLanguage(event.target.value)
-              }
-            >
-              <option value="english">
-                English
-              </option>
-
-              <option value="telugu">
-                Telugu
-              </option>
-
-              <option value="hindi">
-                Hindi
-              </option>
-            </select>
-          </div>
-
-          <div className="control-group">
-            <label>Level</label>
-
-            <select
-              value={level}
-              onChange={(event) =>
-                setLevel(event.target.value)
-              }
-            >
-              <option value="beginner">
-                Beginner
-              </option>
-
-              <option value="intermediate">
-                Intermediate
-              </option>
-
-              <option value="advanced">
-                Advanced
-              </option>
-            </select>
-          </div>
-
-          <div className="control-group">
-            <label>Mode</label>
-
-            <select
-              value={mode}
-              onChange={(event) =>
-                setMode(event.target.value)
-              }
-            >
-              <option value="tutor">
-                Tutor
-              </option>
-
-              <option value="code tutor">
-                Code Tutor
-              </option>
-            </select>
-          </div>
-        </div>
-
-        {/* Chat */}
-        <section className="chat-area">
+        <section className="chat-container">
           {messages.length === 0 ? (
-            <div className="welcome">
+            <div className="welcome-screen">
               <div className="welcome-icon">
                 <Sparkles size={30} />
               </div>
 
-              <h2>
-                What would you like to learn?
-              </h2>
+              <h2>How can I help you learn?</h2>
 
               <p>
-                Ask me anything about programming,
-                AI, machine learning, academics,
-                or technical concepts.
+                Ask me anything about programming, AI,
+                machine learning, mathematics, or other
+                subjects.
               </p>
 
               <div className="suggestions">
-                {suggestions.map(
-                  (suggestion) => (
-                    <button
-                      key={suggestion}
-                      onClick={() =>
-                        selectSuggestion(
-                          suggestion
-                        )
-                      }
-                    >
-                      {suggestion}
-                    </button>
-                  )
-                )}
+                {suggestions.map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    className="suggestion-card"
+                    onClick={() =>
+                      handleSuggestion(suggestion)
+                    }
+                  >
+                    <MessageSquare size={17} />
+
+                    <span>{suggestion}</span>
+                  </button>
+                ))}
               </div>
             </div>
           ) : (
             <div className="messages">
-              {messages.map(
-                (item, index) => (
+              {messages.map((message, index) => (
+                <div
+                  key={message.id}
+                  className={
+                    message.role === "user"
+                      ? "message-row user-row"
+                      : "message-row assistant-row"
+                  }
+                >
                   <div
-                    key={item.id || index}
-                    className={`message-row ${
-                      item.role
-                    }`}
+                    className={
+                      message.role === "user"
+                        ? "avatar user-avatar"
+                        : "avatar assistant-avatar"
+                    }
                   >
-                    <div
-                      className={`avatar ${
-                        item.role
-                      }`}
-                    >
-                      {item.role ===
-                      "user" ? (
-                        "Y"
+                    {message.role === "user" ? (
+                      <User size={17} />
+                    ) : (
+                      <Bot size={18} />
+                    )}
+                  </div>
+
+                  <div className="message-content">
+                    <div className="message-name">
+                      {message.role === "user"
+                        ? "You"
+                        : "AI Tutor"}
+                    </div>
+
+                    <div className="message-bubble">
+                      {message.content ? (
+                        <ReactMarkdown
+                          remarkPlugins={[
+                            remarkGfm,
+                            remarkMath,
+                          ]}
+                          rehypePlugins={[rehypeKatex]}
+                        >
+                          {message.content}
+                        </ReactMarkdown>
                       ) : (
-                        <Sparkles size={18} />
+                        <div className="typing-indicator">
+                          <span />
+                          <span />
+                          <span />
+                        </div>
                       )}
                     </div>
 
-                    <div className="message-wrapper">
-                      <div className="message-name">
-                        {item.role ===
-                        "user"
-                          ? "You"
-                          : "AI Tutor"}
-                      </div>
-
-                      <div className="message-content">
-                        {item.role ===
-                        "assistant" ? (
-                          <ReactMarkdown
-  remarkPlugins={[
-    remarkGfm,
-    remarkMath
-  ]}
-  rehypePlugins={[
-    rehypeKatex
-  ]}
->
-  {item.content}
-</ReactMarkdown>
-                        ) : (
-                          <p>
-                            {item.content}
-                          </p>
-                        )}
-                      </div>
-
-                      {item.role ===
-                        "assistant" && (
+                    {message.role === "assistant" &&
+                      message.content && (
                         <div className="message-actions">
                           <button
                             onClick={() =>
-                              copyMessage(
-                                item.content
-                              )
+                              copyMessage(message.content)
                             }
                             title="Copy"
                           >
@@ -691,95 +637,93 @@ function App() {
 
                           <button
                             onClick={() =>
-                              regenerate(index)
+                              regenerateMessage(index)
                             }
                             title="Regenerate"
                           >
-                            <RefreshCw
-                              size={15}
-                            />
+                            <RotateCcw size={15} />
                           </button>
 
                           <button
-                            title="Helpful"
+                            className={
+                              message.rating === "up"
+                                ? "rated"
+                                : ""
+                            }
+                            onClick={() =>
+                              rateMessage(
+                                message.id,
+                                "up"
+                              )
+                            }
+                            title="Good response"
                           >
-                            <ThumbsUp
-                              size={15}
-                            />
+                            <ThumbsUp size={15} />
                           </button>
 
                           <button
-                            title="Not helpful"
+                            className={
+                              message.rating === "down"
+                                ? "rated"
+                                : ""
+                            }
+                            onClick={() =>
+                              rateMessage(
+                                message.id,
+                                "down"
+                              )
+                            }
+                            title="Bad response"
                           >
-                            <ThumbsDown
-                              size={15}
-                            />
+                            <ThumbsDown size={15} />
                           </button>
                         </div>
                       )}
-                    </div>
-                  </div>
-                )
-              )}
-
-              {loading && (
-                <div className="message-row assistant">
-                  <div className="avatar assistant">
-                    <Sparkles size={18} />
-                  </div>
-
-                  <div className="message-wrapper">
-                    <div className="message-name">
-                      AI Tutor
-                    </div>
-
-                    <div className="typing">
-                      <span />
-                      <span />
-                      <span />
-                    </div>
                   </div>
                 </div>
-              )}
+              ))}
 
               <div ref={messagesEndRef} />
             </div>
           )}
         </section>
 
-        {/* Input */}
-        <div className="input-section">
-          <div className="input-box">
+        {/* INPUT */}
+
+        <div className="input-area">
+          <form
+            className="input-box"
+            onSubmit={handleSubmit}
+          >
             <textarea
               ref={textareaRef}
-              value={message}
-              onChange={(event) =>
-                setMessage(event.target.value)
-              }
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask anything you want to learn..."
+              placeholder="Ask AI Tutor anything..."
               rows={1}
               disabled={loading}
             />
 
             <button
+              type="submit"
               className="send-button"
-              onClick={() =>
-                sendMessage()
-              }
-              disabled={
-                !message.trim() || loading
-              }
-              title="Send"
+              disabled={!input.trim() || loading}
             >
-              <Send size={20} />
+              <Send size={18} />
             </button>
-          </div>
+          </form>
 
-          <p className="disclaimer">
-            AI Tutor can make mistakes. Verify
-            important information.
-          </p>
+          <div className="input-footer">
+            <span>
+              AI Tutor can make mistakes. Verify important
+              information.
+            </span>
+
+            <span>
+              Press <b>Enter</b> to send
+            </span>
+          </div>
         </div>
       </main>
     </div>
